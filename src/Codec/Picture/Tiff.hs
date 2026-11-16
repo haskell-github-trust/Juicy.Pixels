@@ -156,8 +156,9 @@ copyByteString :: B.ByteString -> M.STVector s Word8 -> Int -> Int -> (Word32, W
 copyByteString str vec stride startWrite (from, count) = inner startWrite fromi
   where fromi = fromIntegral from
         maxi = fromi + fromIntegral count
+        maxWrite = M.length vec
 
-        inner writeIdx i | i >= maxi = pure writeIdx
+        inner writeIdx i | i >= maxi || writeIdx >= maxWrite = pure writeIdx
         inner writeIdx i = do
             let v = str `BU.unsafeIndex` i
             (vec `M.unsafeWrite` writeIdx) v
@@ -169,13 +170,16 @@ unpackPackBit :: B.ByteString -> M.STVector s Word8 -> Int -> Int
 unpackPackBit str outVec stride writeIndex (offset, size) = loop fromi writeIndex
   where fromi = fromIntegral offset
         maxi = fromi + fromIntegral size
+        maxWrite = M.length outVec
 
-        replicateByte writeIdx _     0 = pure writeIdx
-        replicateByte writeIdx v count = do
-            (outVec `M.unsafeWrite` writeIdx) v
-            replicateByte (writeIdx + stride) v $ count - 1
+        replicateByte writeIdx _ 0 = pure writeIdx
+        replicateByte writeIdx v count
+            | writeIdx >= maxWrite = pure writeIdx
+            | otherwise = do
+                (outVec `M.unsafeWrite` writeIdx) v
+                replicateByte (writeIdx + stride) v $ count - 1
 
-        loop i writeIdx | i >= maxi = pure writeIdx
+        loop i writeIdx | i >= maxi || writeIdx >= maxWrite = pure writeIdx
         loop i writeIdx = choice
           {-where v = fromIntegral (str `BU.unsafeIndex` i) :: Int8-}
           where v = fromIntegral (str `B.index` i) :: Int8
@@ -523,10 +527,11 @@ gatherStrips comp str nfo = runST $ do
 
 
               fullStripSampleCount = rowPerStrip * width * sampleCount
-              startWriteOffset = V.generate stripCount (fullStripSampleCount *)
+              rasterSampleCount = width * height * sampleCount
+              startWriteOffset = V.generate stripCount (\i -> max 0 $ min rasterSampleCount (i * fullStripSampleCount))
               stripSampleCounts = V.map strip startWriteOffset
                   where
-                      strip start = min fullStripSampleCount (width * height * sampleCount - start)
+                      strip start = min fullStripSampleCount (max 0 (rasterSampleCount - start))
 
               sizes = V.zip4 startWriteOffset stripSampleCounts
                              (tiffOffsets nfo) (tiffStripSize nfo)
