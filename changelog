@@ -1,6 +1,24 @@
 Change log
 ==========
 
+v3.3.10 November 2026
+---------------------
+
+ * Bmp: Fixed an out-of-bounds write (CWE-787) in the RLE decoder: the
+   pixel buffer size was computed with 32-bit `Int32` multiplication
+   (wrapping on large headers), and the RLE cursor (delta escapes,
+   end-of-line) was neither clamped nor bounds-checked before
+   `unsafeWrite`. Dimensions are now validated centrally (pixel count
+   capped at 2^29), allocations use exact `Int` arithmetic, and
+   out-of-bounds RLE writes are clipped. (HSEC-2026-00XX / CVE pending)
+ * Tiff: Fixed an out-of-bounds write (CWE-787) in contiguous strip
+   decoding: uncompressed and PackBits strip copies had no destination
+   bound, and the per-strip size computation wrapped negative for strips
+   starting past the end of the raster. Strip writes are now bounded by
+   the destination buffer and strip counts saturate at the raster
+   boundary. (HSEC-2026-00XX / CVE pending)
+ * Added `bmp-rle-safety` regression test-suite.
+
 v3.3.9 June 2024
 ----------------
 

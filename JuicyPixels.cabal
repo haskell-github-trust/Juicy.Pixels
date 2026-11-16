@@ -439,6 +439,17 @@ Executable toPng
                  bytestring,
                  JuicyPixels
 
+Test-suite bmp-rle-safety
+  type: exitcode-stdio-1.0
+  hs-source-dirs: test-src
+  Default-Language: Haskell2010
+  Main-Is: BmpRleSafety.hs
+  Ghc-options: -O1 -Wall
+  Build-depends: base,
+                 bytestring,
+                 vector,
+                 JuicyPixels
+
 Test-suite imageTest
   type: exitcode-stdio-1.0
   hs-source-dirs: test-src

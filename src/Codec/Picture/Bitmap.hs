@@ -51,7 +51,7 @@ import Data.Binary.Get( Get
                       )
 
 import Data.Bits
-import Data.Int( Int32 )
+import Data.Int( Int32, Int64 )
 import Data.Word( Word32, Word16, Word8 )
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Internal as BI
@@ -528,7 +528,7 @@ decodeImageRGBA8 pixelFormat (BmpV5Header { width = w, height = h, bitPerPixel =
   wi = fromIntegral w
   hi = abs $ fromIntegral h
   stArray = runST $ do
-      arr <- M.new (fromIntegral $ w * abs h * 4)
+      arr <- M.new (wi * hi * 4)
       if h > 0 then
         foldM_ (readLine arr) 0 [0 .. hi - 1]
       else
@@ -570,7 +570,7 @@ decodeImageRGB8 pixelFormat (BmpV5Header { width = w, height = h, bitPerPixel = 
   wi = fromIntegral w
   hi = abs $ fromIntegral h
   stArray = runST $ do
-      arr <- M.new (fromIntegral $ w * abs h * 3)
+      arr <- M.new (wi * hi * 3)
       if h > 0 then
         foldM_ (readLine arr) 0 [0 .. hi - 1]
       else
@@ -620,7 +620,7 @@ decodeImageY8 lowBPP (BmpV5Header { width = w, height = h, bitPerPixel = bpp }) 
   wi = fromIntegral w
   hi = abs $ fromIntegral h
   stArray = runST $ do
-      arr <- M.new . fromIntegral $ w * abs h
+      arr <- M.new (wi * hi)
       if h > 0 then
         foldM_ (readLine arr) 0 [0 .. hi - 1]
       else
@@ -667,9 +667,10 @@ decodeImageY8RLE is4bpp (BmpV5Header { width = w, height = h, byteImageSize = sz
   wi = fromIntegral w
   hi = abs $ fromIntegral h
   xOffsetMax = wi - 1
+  bufferSize = wi * hi
 
   stArray = runST $ do
-    arr <- M.new . fromIntegral $ w * abs h
+    arr <- M.new (wi * hi)
     decodeRLE arr (B.unpack (B.take (fromIntegral sz) str)) ((hi - 1) * wi, 0)
     VS.unsafeFreeze arr
 
@@ -716,10 +717,17 @@ decodeImageY8RLE is4bpp (BmpV5Header { width = w, height = h, byteImageSize = sz
           (False, _) ->
             writeByte b writePos >>= copyN isPadded (n - 1) rest
 
-      -- | Write the next byte to the output array.
+      -- | Write the next byte to the output array. Writes outside the
+      -- [0, wi*hi) range are clipped: malformed RLE streams can move the
+      -- cursor anywhere (delta escapes, EOL past the last row) and the
+      -- sibling non-RLE decoders clip at the end of the image the same way.
+      -- Unwritten pixels stay zero-filled (M.new initializes), so the
+      -- decoded image is deterministic.
       writeByte :: Word8 -> (Int, Int) -> ST s (Int, Int)
       writeByte byte (yOffset, xOffset) = do
-        (arr `M.unsafeWrite` (yOffset + xOffset)) byte
+        let writeIdx = yOffset + xOffset
+        when (writeIdx >= 0 && writeIdx < bufferSize) $
+          (arr `M.unsafeWrite` writeIdx) byte
         return (yOffset, (xOffset + 1) `min` xOffsetMax)
 
 pixel4Get :: Get [Word8]
@@ -785,6 +793,12 @@ decodeBitmapWithPaletteAndMetadata str = flip runGetStrict str $ do
 
   when (height bmpHeader == 0)
        (fail $ "Invalid bmp height (0) ")
+
+  -- Guard against 32-bit multiplication overflow in the image size computation
+  -- and absurd memory allocations: cap the pixel count at 2^29 (2 GiB of RGBA8).
+  when (fromIntegral (width bmpHeader) * abs (fromIntegral (height bmpHeader))
+          > (2 ^ (29 :: Int64)))
+       (fail $ "Invalid bmp dimensions, " ++ show (width bmpHeader, height bmpHeader))
 
   decodeBitmapWithHeaders fileHeader bmpHeader
 
