@@ -539,11 +539,11 @@ Library
                  mtl                 >= 1.1     && < 2.4,
                  binary              >= 0.8.1   && < 0.11,
                  zlib                >= 0.5.3.1 && < 0.8,
-                 transformers        >= 0.2,
-                 vector              >= 0.12.3.1,
-                 primitive           >= 0.4,
+                 transformers        >= 0.2     && < 0.7,
+                 vector              >= 0.12.3.1 && < 0.14,
+                 primitive           >= 0.4     && < 0.10,
                  deepseq             >= 1.1     && < 1.7,
-                 containers          >= 0.4.2
+                 containers          >= 0.4.2   && < 0.9
 
   -- Modules not exported by this package.
   Other-modules: Codec.Picture.BitWriter,
